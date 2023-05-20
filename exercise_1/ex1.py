@@ -7,7 +7,8 @@ import evaluate
 import sys
 import argparse
 import wandb
-
+TODO:
+    -upload train_loss.png 
 # Command Line Parsing:
 # assume args are legal values
 parser = argparse.ArgumentParser()
