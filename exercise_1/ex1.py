@@ -40,51 +40,66 @@ def compute_metrics(eval_preds:tuple):
     preds = np.argmax(logits, axis=-1)
     return metric.compute(predictions=preds, references=labels)
 
+def train_model(seed:int,checkpoint:str,output_dir:str,train_dataset,validation_dataset,data_collator,tokenizer):
+
+    # Weights & Biases Init:
+    run = wandb.init(
+        settings=wandb.Settings(start_method="fork"),
+        project="ANLP_ex1",
+        name=checkpoint + "-Seed_number" + str(seed),
+        tags=[checkpoint,str(seed),"fine_tuning"],
+        notes = "this is a train_run with model: " + checkpoint + " and seed number" + str(seed),
+        job_type='train'
+    )
+    model = AutoModelForSequenceClassification.from_pretrained(checkpoint, num_labels=2)
+    training_args = TrainingArguments(
+        evaluation_strategy='no', # no evaluation during training,
+        seed=seed,
+        report_to = 'wandb',
+        output_dir = output_dir,
+        save_total_limit = 1 # Only keep the most recent checkpoint
+    )  # all rest default
+# NOTE: somewhy save_total_limit = 1 doesnt work on GoogleDrive
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=validation_dataset,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+        compute_metrics=compute_metrics,)
+    trainer.train()
+    run.finish()
+    return trainer #TODO: check if need to return
 
 
 ########################################################################################################################
 
+# Checkpoints for each model in Huggingface: bert/roberta/electra
+model1_checkpoint = 'bert-base-uncased'
+model2_checkpoint = 'roberta-base'
+model3_checkpoint = 'google/electra-base-generator'
+checkpoint = model1_checkpoint
+output_dir: str = '/content/drive/MyDrive/Github/Advance-NLP/exercise_1/models/'+ checkpoint + str(seed)#TODO: set output_dir in collab to drive
 
 # Pre-processing
-checkpoint = 'bert-base-uncased'
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 raw_dataset = load_dataset('sst2')  # Standford Sentiment Treebank
-tokenized_dataset = raw_dataset.map(tokenize_function, batch=True)
-model_accuracies = []
-# Fine-tuning  model with multiple seeds
-for i, seed in enumerate(SEEDS):
-    # Weights & Biases Init:
-    run = wandb.init(
-        project="ANLP_ex1",
-        name=checkpoint + "-Seed_number" + str(i),
-        tags=[checkpoint,str(i),"fine_tuning"],
-        notes = "this is a train_run with model: " + checkpoint + " and seed number" + str(i),
-        job_type='train'
-    )
-    output_dir: str = ""+str(seed)#TODO: set output_dir in collab to drive
+tokenized_dataset = raw_dataset.map(tokenize_function,fn_kwargs={'tokenizer':tokenizer}, batched=True)
+train_dataset = tokenized_dataset['train'] if training_count == -1 else dataset['train'].select(range(training_count))
+validation_dataset = tokenized_dataset['validation'] if validation_count == -1 else dataset['validation'].select(range(validation_count))
 
-    model = AutoModelForSequenceClassification(checkpoint, num_labels=2)
-    training_args = TrainingArguments(
-        output_dir=output_dir,
-        evaluation_strategy='epoch',
-        seed=seed,
-    )  # all rest default
+# we will run the following code for each model
+for seed in SEEDS:
+    trainer = train_model(seed,checkpoint,output_dir,train_dataset,validation_dataset,data_collator,tokenizer)
+#     train_duration = trainer.state.train_duration
 
-    trainer = Trainer(
-        model=model,
-        training_args=training_args,
-        train_dataset=tokenized_dataset['train'][:args.training_count],
-        eval_dataset=tokenized_dataset['validation'][:args.validation_count],
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics
-    )
-    trainer.train()
-    wandb.save(output_dir)
-    last_accuracy = trainer.state.log_history[-1]['eval_accuracy']
-    model_accuracies.append(last_accuracy)
-    run.finish()
+#     # To get the validation inference time, we first need to do an evaluation
+#     metrics = trainer.evaluate()
+#     eval_duration = trainer.state.eval_duration
+
+
 
 
 #mean and std for the Accuracy of model
