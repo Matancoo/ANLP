@@ -1,6 +1,6 @@
-bert-base-uncased,<mean accuracy> +- <accuracy std>
-roberta-base,<mean accuracy> +- <accuracy std>
-google/electra-base-generator,<mean accuracy> +- <accuracy std>
+bert-base-uncased,0.9098 +- 0.0023
+roberta-base,0.6269 +- 0.1665
+google/electra-base-generator,0.8995 +- 0.0023
 ----
 train time,19263
-predict time,<predict time in seconds>
+predict time,3.1736
