@@ -1,6 +1,6 @@
-<model name>,<mean accuracy> +- <accuracy std>
-<model name>,<mean accuracy> +- <accuracy std>
-<model name>,<mean accuracy> +- <accuracy std>
+bert-base-uncased,<mean accuracy> +- <accuracy std>
+roberta-base,<mean accuracy> +- <accuracy std>
+google/electra-base-generator,<mean accuracy> +- <accuracy std>
 ----
-train time,<train time in seconds>
+train time,19263
 predict time,<predict time in seconds>
