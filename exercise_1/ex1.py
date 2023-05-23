@@ -73,7 +73,6 @@ def train_model(seed:int,checkpoint:str,output_dir:str,train_dataset,validation_
     return trainer #TODO: check if need to return
 
 def write_results(checkpoints,models_parameters,res_directory):
-    # updating res.txt as specified in Exercise
     assert len(models_parameters) == len(checkpoints)
     with open('/res.txt','a') as f:
         for i in range(len(models_parameters)):
@@ -87,12 +86,11 @@ def write_results(checkpoints,models_parameters,res_directory):
 ########################################################################################################################
 
 # Checkpoints for models 
-checkpoints = 'bert-base-uncased','roberta-base','google/electra-base-generator'
+checkpoints = ['bert-base-uncased','roberta-base','google/electra-base-generator']
 best_model_output_dir: str = ''
 models_parameters = [] # tupple of (mean_accuracy,accuracy_std) for each model
+
 # Pre-processing
-tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 raw_dataset = load_dataset('sst2')  # Standford Sentiment Treebank
 tokenized_dataset = raw_dataset.map(tokenize_function,fn_kwargs={'tokenizer':tokenizer}, batched=True)
 train_dataset = tokenized_dataset['train'] if training_count == -1 else dataset['train'].select(range(training_count))
@@ -100,6 +98,8 @@ validation_dataset = tokenized_dataset['validation'] if validation_count == -1 e
 
 # train each model on each seed and record metrics
 for checkpoint in checkpoints:
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     model_accuracies = []
     for seed in SEEDS:
         start_time = time.time()
@@ -109,13 +109,31 @@ for checkpoint in checkpoints:
         TOTAL_TRAINING_TIME += training_time 
         metrics = trainer.evaluate()
         model_accuracies.append(metrics['eval_accuracy'])
-
         
     # calculating mean & std of accuracies of models trained on different seeds
     mean_accuracy = np.mean(model_accuracies)
     accuracy_std = np.std(model_accuracies)
     models_parameters.append(mean_accuracy,accuracy_std)
+    
+# updating res.txt as specified in Exercise
 write_results(checkpoints,models_parameters'./res.txt')
+
+# Evaluation on testset using best model
+checkpoint = 'bert-base-uncased'#need best checkpoint
+test_dataset = raw_dataset['test]
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+classification_pipeline = pipeline("text-classification", model=best_model_output_dir, tokenizer=tokenizer)
+test_sentences = test_dataset['sentence']
+test_labels = test_dataset['label']
+predictions = classification_pipeline(test_sentences)
+predicted_labels = [prediction['label'] for prediction in predictions]
+
+# writing perdiction.txt as specified in exercise
+with open('path','a') as f:
+  for tup in list(zip(test_sentences,predicted_labels)):
+    line = tup[0] + "###" + tup[1][-1] + "\n"
+    f.write(line)
+  f.close
 
 
     
