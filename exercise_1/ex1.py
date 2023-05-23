@@ -7,6 +7,7 @@ import evaluate
 import sys
 import argparse
 import wandb
+import time
 TODO:
     -upload train_loss.png 
 # Command Line Parsing:
@@ -17,7 +18,7 @@ parser.add_argument('--training_count', type=int, required=True)
 parser.add_argument('--validation_count', type=int, required=True)
 parser.add_argument('--prediction_count', type=int, required=True)
 args = parser.parse_args()
-
+TOTAL_TRAINING_TIME = 0
 SEEDS: list = list(range(args.seed_num))
 ########################################################################################################################
 #model1
@@ -55,7 +56,6 @@ def train_model(seed:int,checkpoint:str,output_dir:str,train_dataset,validation_
     training_args = TrainingArguments(
         evaluation_strategy='no', # no evaluation during training,
         seed=seed,
-        report_to = 'wandb',
         output_dir = output_dir,
         save_total_limit = 1 # Only keep the most recent checkpoint
     )  # all rest default
@@ -72,16 +72,24 @@ def train_model(seed:int,checkpoint:str,output_dir:str,train_dataset,validation_
     run.finish()
     return trainer #TODO: check if need to return
 
-
+def write_results(checkpoints,models_parameters,res_directory):
+    # updating res.txt as specified in Exercise
+    assert len(models_parameters) == len(checkpoints)
+    with open('/res.txt','a') as f:
+        for i in range(len(models_parameters)):
+            mean_accuracy = models_parameters[i][0]
+            accuracy_std = models_parameters[i][1]
+            line = checkpoints[i] + ',' + str(mean_accuracy) + '+-' + str(accuracy_std) + '\n'
+            f.write(line)
+         line = "train time," + str(TOTAL_TRAINING_TIME) + '\n'
+         f.write(line)
+         f.close()
 ########################################################################################################################
 
-# Checkpoints for each model in Huggingface: bert/roberta/electra
-model1_checkpoint = 'bert-base-uncased'
-model2_checkpoint = 'roberta-base'
-model3_checkpoint = 'google/electra-base-generator'
-checkpoint = model1_checkpoint
-output_dir: str = '/content/drive/MyDrive/Github/Advance-NLP/exercise_1/models/'+ checkpoint + str(seed)#TODO: set output_dir in collab to drive
-
+# Checkpoints for models 
+checkpoints = 'bert-base-uncased','roberta-base','google/electra-base-generator'
+best_model_output_dir: str = ''
+models_parameters = [] # tupple of (mean_accuracy,accuracy_std) for each model
 # Pre-processing
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
@@ -90,9 +98,38 @@ tokenized_dataset = raw_dataset.map(tokenize_function,fn_kwargs={'tokenizer':tok
 train_dataset = tokenized_dataset['train'] if training_count == -1 else dataset['train'].select(range(training_count))
 validation_dataset = tokenized_dataset['validation'] if validation_count == -1 else dataset['validation'].select(range(validation_count))
 
-# we will run the following code for each model
-for seed in SEEDS:
-    trainer = train_model(seed,checkpoint,output_dir,train_dataset,validation_dataset,data_collator,tokenizer)
+# train each model on each seed and record metrics
+for checkpoint in checkpoints:
+    model_accuracies = []
+    for seed in SEEDS:
+        start_time = time.time()
+        trainer = train_model(seed,checkpoint,output_dir,train_dataset,validation_dataset,data_collator,tokenizer)
+        end_time = time.time()
+        training_time = end_time-start_time
+        TOTAL_TRAINING_TIME += training_time 
+        metrics = trainer.evaluate()
+        model_accuracies.append(metrics['eval_accuracy'])
+
+        
+    # calculating mean & std of accuracies of models trained on different seeds
+    mean_accuracy = np.mean(model_accuracies)
+    accuracy_std = np.std(model_accuracies)
+    models_parameters.append(mean_accuracy,accuracy_std)
+write_results(checkpoints,models_parameters'./res.txt')
+
+
+    
+
+
+        
+    
+
+                            # bert-base-uncased,<mean accuracy> +- <accuracy std>
+# roberta-base,<mean accuracy> +- <accuracy std>
+# google/electra-base-generator,<mean accuracy> +- <accuracy std>
+# ----
+# train time,19263
+# predict time,<predict time in seconds>
 #     train_duration = trainer.state.train_duration
 
 #     # To get the validation inference time, we first need to do an evaluation
