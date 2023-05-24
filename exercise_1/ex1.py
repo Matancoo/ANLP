@@ -79,56 +79,72 @@ def write_results(checkpoints, models_parameters, res_directory):
         f.close()
 
 
+def evaluate_and_save_model(trainer, model_accuracies, best_seed_output_dir):
+    metrics = trainer.evaluate()
+    if not model_accuracies or model_accuracies[-1] < metrics['eval_accuracy']:
+        trainer.save_model(best_seed_output_dir)
+    model_accuracies.append(metrics['eval_accuracy'])
+    return metrics['eval_accuracy']
+
+
+def train_and_evaluate_models(args, checkpoints, raw_dataset, best_model_output_dir):
+    best_accuracy = 0
+    best_trainer = None
+    best_seed_dir = None
+    total_training_time = 0
+    parameters = []
+
+    for curr_checkpoint in checkpoints:
+        # pre-processing
+        tokenizer = AutoTokenizer.from_pretrained(curr_checkpoint)
+        tokenized_dataset = raw_dataset.map(tokenize_function, fn_kwargs={'tokenizer': tokenizer}, batched=True)
+        train_dataset = tokenized_dataset['train'].select(range(args.training_count)) if args.training_count != -1 else \
+        tokenized_dataset['train']
+        validation_dataset = tokenized_dataset['validation'].select(
+            range(args.validation_count)) if args.validation_count != -1 else tokenized_dataset['validation']
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+        # model output_dirs to keep tack of best model
+        curr_model_dir = './models/current_model/'
+        best_seed_output_dir = './models/best_seed/'
+
+        model_accuracies = []
+        curr_best_accuracy = 0
+        curr_best_trainer = None
+
+        # train each model on each seed
+        for seed in range(args.seed_num):
+            start_time = time.time()
+            trainer = train_model(seed, curr_checkpoint, curr_model_dir, train_dataset, validation_dataset,
+                                  data_collator,
+                                  tokenizer)
+            end_time = time.time()
+            total_training_time += end_time - start_time
+            # save only the best seed
+            model_accuracy = evaluate_and_save_model(trainer, model_accuracies, best_seed_output_dir)
+
+            if model_accuracy > best_accuracy:
+                best_trainer = trainer
+                best_accuracy = model_accuracy
+
+        mean_accuracy = np.mean(model_accuracies)
+        accuracy_std = np.std(model_accuracies)
+        parameters.append((mean_accuracy, accuracy_std))  # TODO: see how to intergrate
+        if mean_accuracy > best_accuracy:
+            best_trainer.save_model(best_model_output_dir)
+            best_accuracy = mean_accuracy
+
+    return total_training_time,parameters
+
+
 ########################################################################################################################
 
 def main(args):
-    total_training_time = 0
-    raw_dataset = load_dataset('sst2')  # Standford Sentiment Treebank
-
-    # Checkpoints for models
+    raw_dataset = load_dataset('sst2')
     checkpoints = ['bert-base-uncased', 'roberta-base', 'google/electra-base-generator']
-    #     best_model_output_dir = ''
-    #     best_checkpoint = ''
-    #     best_seed_model = ''
-    best_seed_model = ''
-
-    models_parameters = []  # tupple of (mean_accuracy,accuracy_std) for each model
-
-    # train each model on each seed and record metrics
-    for checkpoint in checkpoints:
-        # pre processing
-        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-        tokenized_dataset = raw_dataset.map(tokenize_function, fn_kwargs={'tokenizer': tokenizer}, batched=True)
-        train_dataset = tokenized_dataset['train'] if args.training_count == -1 else tokenized_dataset['train'].select(
-            range(args.training_count))
-        validation_dataset = tokenized_dataset['validation'] if args.validation_count == -1 else tokenized_dataset[
-            'validation'].select(
-            range(args.validation_count))
-        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-        model_accuracies = []
-
-        # train each model with each seed
-        for seed in range(args.seed_num):
-            start_time = time.time()
-            trainer = train_model(seed, checkpoint, output_dir, train_dataset, validation_dataset, data_collator,
-                                  tokenizer)
-            end_time = time.time()
-            training_time = end_time - start_time
-            total_training_time += training_time
-            metrics = trainer.evaluate()
-            model_accuracies.append(metrics['eval_accuracy'])
-
-        # calculating mean & std of accuracies of models trained on different seeds
-        mean_accuracy = np.mean(model_accuracies)
-        accuracy_std = np.std(model_accuracies)
-
-        models_parameters.append((mean_accuracy, accuracy_std))
-
-        # compaire models to save only the best 
-        #         if best_model_output_dir:
-
-        # updating res.txt as specified in Exercise
-        write_results(checkpoints, models_parameters, RESULTS_FILE_PATH)
+    best_model_output_dir = './models/best_model/'
+    total_training_time,models_parameters = train_and_evaluate_models(args, checkpoints, raw_dataset, best_model_output_dir)
+    write_results(checkpoints, models_parameters, RESULTS_FILE_PATH)
 
     # Evaluation on test-set using best model
     test_dataset = raw_dataset['test']
