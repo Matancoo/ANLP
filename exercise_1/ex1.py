@@ -168,12 +168,12 @@ def main(training_args):
     prediction_text = "\n".join([f"{sentence}###{label[-1]}" for sentence, label in zip(test_sentences,predicted_labels)])
     write_to_file(PREDICTIONS_FILE_PATH,prediction_text)
 
-    if __name__ == "__main__":
-        # Command Line Parsing: # assume args are legal values
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--seed_num', type=int, required=True)
-        parser.add_argument('--training_count', type=int, required=True)
-        parser.add_argument('--validation_count', type=int, required=True)
-        parser.add_argument('--prediction_count', type=int, required=True)
-        args = parser.parse_args()
-        main(args)
+if __name__ == "__main__":
+    # Command Line Parsing: # assume args are legal values
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seed_num', type=int, required=True)
+    parser.add_argument('--training_count', type=int, required=True)
+    parser.add_argument('--validation_count', type=int, required=True)
+    parser.add_argument('--prediction_count', type=int, required=True)
+    args = parser.parse_args()
+    main(args)
